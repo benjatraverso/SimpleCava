@@ -11,7 +11,7 @@ const byte GREEN_LED = 9;
 const byte RED_LED = 8;
 const byte BLUE_LED = 7;
 const byte PELTIER = 4;
-const byte FANS = 3;
+const byte POWER = 3;
 //const byte TEMP_SENSOR = A0;
 
 const int LED_BLINK_DELAY = 1000;
@@ -22,30 +22,31 @@ int fanPWM = 0;
 
 enum states
 {
-	idle = 0,
+	cool = 0,
 	cooling,
 	error
 };
 
 void setup(void)
 {
-  Serial.begin(9600);
-  state = idle;
-  pinMode(GREEN_LED, OUTPUT);
-  pinMode(RED_LED, OUTPUT);
-  pinMode(BLUE_LED, OUTPUT);
-  pinMode(PELTIER, OUTPUT);
-  pinMode(FANS, OUTPUT);
-  sensors.begin();
+	Serial.begin(9600);
+	state = idle;
+	pinMode(GREEN_LED, OUTPUT);
+	pinMode(RED_LED, OUTPUT);
+	pinMode(BLUE_LED, OUTPUT);
+	pinMode(PELTIER, OUTPUT);
+	pinMode(FANS, OUTPUT);
+	sensors.begin();
+	showStarted();
 }
 
 void loop(void)
 {
 	switch(state)
 	{
-		case idle:
+		case cool:
 		{
-			doIdle();
+			checkTemp();
 			state = cooling;
 			break;
 		}
@@ -59,7 +60,7 @@ void loop(void)
 			}
 			else
 			{
-				state = idle;
+				state = fanOnly;
 			}
 			break;
 		}
@@ -75,12 +76,12 @@ void loop(void)
 	}
 }
 
-void doIdle(void)
+void checkTemp(void)
 {
-  Serial.println("Idle");
-  _T("Fan", fanPWM);
+	Serial.println("We are cool");
 	digitalWrite(GREEN_LED, HIGH);
 	float temp = readTemp();
+	int cero = millis();
 	while( DESIRED_TEMP > temp ) //check we are in desired temp
 	{
 		if(DESIRED_TEMP < temp - 1)
@@ -93,10 +94,10 @@ void doIdle(void)
 			digitalWrite(BLUE_LED, LOW);
 		}
 
-		slowCoolerIfMooving();
+		turnPowerOff(cero);
 
 		delay(TEMP_CHECK_DELAY);
-    temp = readTemp();
+		temp = readTemp();
 	}
 
 	digitalWrite(BLUE_LED, LOW);// not cooler than expected for sure
@@ -106,8 +107,8 @@ void doIdle(void)
 int doCooling(void)
 {
 	Serial.println("Cooling");
-	digitalWrite(RED_LED, HIGH);
-	analogWrite(FANS, TOP_FAN_SPEED);//turn on fans at full speed
+	digitalWrite(BLUE_LED, HIGH);
+	analogWrite(POWER, HIGH);//turn on fans at full speed
 	digitalWrite(PELTIER, HIGH);// turn on cooling
 
 	float temp = readTemp();
@@ -131,7 +132,7 @@ int doCooling(void)
 		temp = readTemp();
 	}
 
-	digitalWrite(RED_LED, LOW); // no more on cooling state
+	digitalWrite(BLUE_LED, LOW); // no more on cooling state
 	return 0;
 }
 
@@ -140,14 +141,24 @@ void doError(void)
 	digitalWrite(PELTIER, LOW); //in error, first thing is to protect the peltier
 	Serial.println("Error");
 	bool ledState = 0;
+	float cero = millis();
 	while(1)
 	{
 		ledState = !ledState;
 		digitalWrite(RED_LED, ledState);
-		slowCoolerIfMooving();
+		turnPowerOff(cero);
 
 		delay(LED_BLINK_DELAY);
 		// TODO: get out if been here for too long
+	}
+}
+
+void turnPowerOff(float cero)
+{
+	if(millis() - cero > 1000*60)
+	{
+		// turn the power completly, sensor is suppplied from other source
+		digitalWrite(POWER, LOW);
 	}
 }
 
@@ -172,12 +183,14 @@ void _T(String text, float value)
   Serial.println(value);
 }
 
-void slowCoolerIfMooving(void)
-{
-	if(fanPWM > 0)
-	{
-		// if fan is on but temp is desired, decreese it's speed slowly
-		fanPWM =- 5;
-		analogWrite(FANS, fanPWM);
-	}
+void showStarted(void){
+	digitalWrite(BLUE_LED, HIGH));
+	delay(2000);
+	digitalWrite(GREEN_LED, HIGH);
+	delay(2000);
+	digitalWrite(RED_LED, HIGH);
+	delay(5000);
+	digitalWrite(BLUE_LED, LOW);
+	digitalWrite(GREEN_LED, LOW);
+	digitalWrite(RED_LED, LOW);
 }
